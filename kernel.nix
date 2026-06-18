@@ -24,7 +24,13 @@ let
     sed -E 's@^(CONFIG_MODULE_SIG_KEY)=.*@\1=""@' ${config} > $out
   '';
 in
-pkgs.linuxManualConfig {
+# NOTE: enableParallelBuilding = false is a DIAGNOSTIC setting — a serial build puts
+# the failing command last so the error isn't hidden behind -j output. Revert to
+# parallel once the build is green.
+(pkgs.linuxManualConfig {
   inherit version src configfile;
   allowImportFromDerivation = true;
-}
+}).overrideAttrs
+  (_: {
+    enableParallelBuilding = false;
+  })
