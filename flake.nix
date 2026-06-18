@@ -5,8 +5,7 @@
   nixConfig = {
     extra-substituters = [ "https://nix-pvm.cachix.org" ];
     extra-trusted-public-keys = [
-      # Replace with your cache's real public key (shown when you create the cache).
-      "nix-pvm.cachix.org-1:REPLACE_WITH_PUBLIC_KEY"
+      "nix-pvm.cachix.org-1:Nf9cU+dJIq7XpVPE9SMD4UWeXqO1u0U4m6ApnN3CtRg="
     ];
   };
 
