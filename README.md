@@ -1,18 +1,24 @@
 # nix-pvm
 
-A **generic** Nix build of the **PVM host kernel** (Linux 6.7.12 + `CONFIG_KVM_PVM`),
-published to a binary cache so any project can run Firecracker / Cloud-Hypervisor
-microVMs on cloud VMs that have **no native `/dev/kvm`** (e.g. Hetzner Cloud, and
-other providers) without compiling a kernel themselves.
+A **generic** Nix build of the **PVM kernels** (Linux 6.7.12), published to a binary
+cache so any project can run Cloud-Hypervisor microVMs on cloud VMs that have **no
+native `/dev/kvm`** (e.g. Hetzner Cloud, and other providers) without compiling a
+kernel themselves. Two packages, both from one source:
+
+- **`pvm-kernel`** — the **host** kernel (`CONFIG_KVM_PVM`). Run it on the cloud VM and
+  `kvm-pvm` exposes `/dev/kvm` with no hardware nested virt.
+- **`pvm-guest-kernel`** — the **guest** kernel (`CONFIG_PVM_GUEST` + `CONFIG_PVH`) that
+  the microVM boots. A PVM guest runs paravirtualized, so a stock kernel can't boot
+  under PVM — the hypervisor must boot this one.
 
 ## Generic by design
 
 - The **kernel source** (`virt-pvm/linux@51ee0edb884b`, the PVM patches) is fully
-  cloud-agnostic.
-- Only the **kernel config** tunes drivers for an environment. The default
-  `configs/generic.config` is a broad Fedora-derived config — **validated booting on
-  a Hetzner `cx23`** (`/dev/kvm` via `kvm-pvm`) and broad enough to be expected to
-  boot on most cloud VMs.
+  cloud-agnostic and carries both host and guest support.
+- Only the **kernel config** tunes a build. `configs/generic.config` is a broad
+  Fedora-derived host config — **validated booting on a Hetzner `cx23`** (`/dev/kvm`
+  via `kvm-pvm`); `configs/guest.config` is the lean PVM guest config (virtio + serial
+  + ext4, `CONFIG_PVH` for cloud-hypervisor's boot protocol).
 - Need a leaner/different target? Drop a `configs/<name>.config` and expose it as
   another package (see `flake.nix`), or build one ad-hoc with `lib.mkKernel`.
 
@@ -21,9 +27,10 @@ other providers) without compiling a kernel themselves.
 | File | Role |
 |---|---|
 | `kernel.nix` | `mkKernel`: `linuxManualConfig` from the pinned PVM source + a config |
-| `configs/generic.config` | Broad config validated on Hetzner cx23 |
-| `flake.nix` | `packages.x86_64-linux.pvm-kernel` (+ `lib.mkKernel`); cache in `nixConfig` |
-| `.github/workflows/build.yml` | Builds + pushes to Cachix on push |
+| `configs/generic.config` | Broad **host** config validated on Hetzner cx23 |
+| `configs/guest.config` | Lean **guest** config the microVM boots (PVM guest + PVH) |
+| `flake.nix` | `packages.x86_64-linux.{pvm-kernel,pvm-guest-kernel}` (+ `lib.mkKernel`); cache in `nixConfig` |
+| `.github/workflows/build.yml` | Builds both kernels + pushes to Cachix on push |
 
 ## One-time cache setup
 
@@ -34,10 +41,12 @@ other providers) without compiling a kernel themselves.
 ## Build
 
 ```sh
-nix build .#pvm-kernel             # x86_64-linux only (CI or an x86 box)
+nix build .#pvm-kernel             # host kernel  (x86_64-linux only — CI or an x86 box)
+nix build .#pvm-guest-kernel       # guest kernel (the microVM boots this)
 ```
 
-First build ~30–60 min; CI pushes it to the cache so consumers substitute it instantly.
+First host build ~1h, guest ~20 min; CI builds both and pushes them to the cache so
+consumers substitute them instantly.
 
 ## Consume it (e.g. a Hetzner Cloud VM)
 
@@ -98,8 +107,25 @@ the builder's `/etc/nix/nix.conf` (or `nix.settings` if the builder is NixOS).
 Install on a fresh Hetzner VM with `nixos-anywhere` (created from any cloud image,
 then this flake takes over).
 
-Lower-level: `inputs.nix-pvm.packages.x86_64-linux.pvm-kernel` for the bare kernel
-package.
+### Boot a microVM (the guest kernel)
+
+The module above configures the **host**. To boot a guest, point your hypervisor at
+the **guest** kernel package — e.g. with cloud-hypervisor:
+
+```sh
+cloud-hypervisor \
+  --kernel ${nix-pvm.packages.x86_64-linux.pvm-guest-kernel}/bzImage \
+  --initramfs <your-initramfs> \
+  --cmdline "console=ttyS0" \
+  --cpus boot=1 --memory size=512M --serial tty --console off
+```
+
+The guest kernel is built with `CONFIG_PVH`, so cloud-hypervisor boots it via its PVH
+entry point. Both kernels come from the same cache, so neither is ever compiled
+locally.
+
+Lower-level: the bare packages are `inputs.nix-pvm.packages.x86_64-linux.pvm-kernel`
+(host) and `…pvm-guest-kernel` (guest).
 
 ## License
 
