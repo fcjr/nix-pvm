@@ -42,6 +42,13 @@
           # kvm_pvm replaces kvm_intel as the KVM backend.
           boot.kernelModules = [ "kvm-pvm" ];
           boot.blacklistedKernelModules = [ "kvm_intel" ];
+
+          # Wire the host to substitute the prebuilt kernel (compiling it is ~1h+).
+          # These append to the defaults, so cache.nixos.org still applies.
+          nix.settings.substituters = [ "https://nix-pvm.cachix.org" ];
+          nix.settings.trusted-public-keys = [
+            "nix-pvm.cachix.org-1:Nf9cU+dJIq7XpVPE9SMD4UWeXqO1u0U4m6ApnN3CtRg="
+          ];
         };
     };
 }

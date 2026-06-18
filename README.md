@@ -41,7 +41,9 @@ First build ~30–60 min; CI pushes it to the cache so consumers substitute it i
 
 ## Consume it (e.g. a Hetzner Cloud VM)
 
-One line — import the module and your host runs the PVM kernel with `/dev/kvm`:
+Add the input and import the module — that's the whole integration. The module sets
+the PVM kernel, `pti=off`, `kvm-pvm`, **and** points the host at this cache, so future
+rebuilds pull the prebuilt kernel instead of compiling it:
 
 ```nix
 {
@@ -51,7 +53,7 @@ One line — import the module and your host runs the PVM kernel with `/dev/kvm`
     nixosConfigurations.my-host = nixpkgs.lib.nixosSystem {
       system = "x86_64-linux";
       modules = [
-        nix-pvm.nixosModules.default   # ← PVM kernel + pti=off + kvm-pvm
+        nix-pvm.nixosModules.default   # ← PVM kernel + pti=off + kvm-pvm + cache
         ./configuration.nix
       ];
     };
@@ -59,17 +61,45 @@ One line — import the module and your host runs the PVM kernel with `/dev/kvm`
 }
 ```
 
-Install it on a fresh Hetzner VM with `nixos-anywhere` (the box is created with any
-cloud image, then this flake takes over). After it boots: `ls -l /dev/kvm` shows the
-device via `kvm-pvm`.
+After it boots, `ls -l /dev/kvm` shows the device via `kvm-pvm`.
 
-Add the same `extra-substituters` / `extra-trusted-public-keys` to the consumer so
-the kernel is **pulled, not rebuilt** (or set `nixpkgs.follows` and let CI keep the
-cache warm). Keep `nixpkgs` aligned with the consumer's so the module set around the
-kernel also hits the cache.
+### Keep the cache hit: don't make nix-pvm follow your nixpkgs
 
-Lower-level: `inputs.nix-pvm.packages.x86_64-linux.pvm-kernel` if you want the bare
-kernel package.
+`nix-pvm` pins its own `nixpkgs` (in `flake.lock`) and CI builds + caches the kernel
+against *exactly* that pin. If you override it with
+`inputs.nix-pvm.inputs.nixpkgs.follows = "nixpkgs"`, the kernel is rebuilt against
+**your** nixpkgs — a different derivation hash, so it's a cache miss and compiles
+locally (~1h+). Leave nix-pvm's nixpkgs as-is and the prebuilt kernel substitutes
+byte-for-byte. Run `nix flake update nix-pvm` when you want a newer build.
+
+### The first build needs the cache trusted up front
+
+The module configures the cache on the *resulting* system, but the **first** build
+(e.g. `nixos-anywhere`, or any `nix build` before that config is live) runs on a
+builder that doesn't trust the cache yet. Nix only reads `nixConfig` from the flake
+you build — not from dependencies — so add the cache to **your own** flake:
+
+```nix
+{
+  nixConfig = {
+    extra-substituters = [ "https://nix-pvm.cachix.org" ];
+    extra-trusted-public-keys = [
+      "nix-pvm.cachix.org-1:Nf9cU+dJIq7XpVPE9SMD4UWeXqO1u0U4m6ApnN3CtRg="
+    ];
+  };
+  inputs.nix-pvm.url = "github:fcjr/nix-pvm";
+  # outputs = ...
+}
+```
+
+then build with `--accept-flake-config`. Equivalently, drop the same two lines into
+the builder's `/etc/nix/nix.conf` (or `nix.settings` if the builder is NixOS).
+
+Install on a fresh Hetzner VM with `nixos-anywhere` (created from any cloud image,
+then this flake takes over).
+
+Lower-level: `inputs.nix-pvm.packages.x86_64-linux.pvm-kernel` for the bare kernel
+package.
 
 ## License
 
