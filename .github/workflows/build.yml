@@ -21,4 +21,18 @@ jobs:
           name: nix-pvm
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
       # cachix-action pushes every path built during the job to the cache.
-      - run: nix build .#pvm-kernel --print-out-paths
+      # -L streams the full build log so tee can capture it for diagnosis.
+      - name: Build PVM kernel
+        run: |
+          set -o pipefail
+          nix build .#pvm-kernel -L --print-out-paths 2>&1 | tee /tmp/build.log
+
+      # On failure, surface the real compile error (the default last-25-lines hides
+      # it behind the parallel build).
+      - name: Show build errors
+        if: failure()
+        run: |
+          echo "===== error lines ====="
+          grep -niE "error:|fatal error|undefined reference|: Error [0-9]+|No such file or directory" /tmp/build.log | head -60 || true
+          echo "===== last 80 lines ====="
+          tail -n 80 /tmp/build.log || true
