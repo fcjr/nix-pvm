@@ -1,0 +1,24 @@
+name: build
+
+# Build the PVM kernel and push it to the binary cache. Consumers then substitute
+# it instead of compiling. Runs on push and on demand.
+on:
+  push:
+    branches: [main]
+  # Rebuild periodically to keep the cache warm and catch breakage from input updates.
+  schedule:
+    - cron: "0 6 * * 1" # weekly, Mondays 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: cachix/cachix-action@v15
+        with:
+          name: nix-pvm
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+      # cachix-action pushes every path built during the job to the cache.
+      - run: nix build .#pvm-kernel --print-out-paths
