@@ -22,10 +22,10 @@ jobs:
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
       # cachix-action pushes every path built during the job to the cache.
       # -L streams the full build log so tee can capture it for diagnosis.
-      - name: Build PVM kernel
+      - name: Build PVM kernels (host + guest)
         run: |
           set -o pipefail
-          nix build .#pvm-kernel -L --print-out-paths 2>&1 | tee /tmp/build.log
+          nix build .#pvm-kernel .#pvm-guest-kernel -L --print-out-paths 2>&1 | tee /tmp/build.log
 
       # On failure, surface the real compile error (the default last-25-lines hides
       # it behind the parallel build).

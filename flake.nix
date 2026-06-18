@@ -25,6 +25,10 @@
         # Broad config — validated booting on Hetzner cx23, expected to work on most
         # cloud VMs. Add configs/<provider>.config + a line here to specialize.
         pvm-kernel = mkKernel ./configs/generic.config;
+        # The guest kernel the microVM boots: same source, CONFIG_PVM_GUEST=y +
+        # CONFIG_PVH=y (cloud-hypervisor's boot protocol) + virtio. A PVM guest runs
+        # paravirtualized, so a stock kernel can't boot under PVM — this one must.
+        pvm-guest-kernel = mkKernel ./configs/guest.config;
         default = self.packages.${system}.pvm-kernel;
       };
 
