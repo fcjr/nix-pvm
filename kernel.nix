@@ -19,14 +19,15 @@ let
   };
 
   # Tweaks needed to build this distro config under nixpkgs (everything else as-validated):
-  #  - MODULE_SIG_KEY: drop the Fedora cert path so the build generates its own key.
   #  - UAPI_HEADER_TEST: the PVM patch's exported asm/pvm_para.h uses kernel types
   #    (u64/u32) so it fails the self-contained-header lint. The kernel builds fine;
-  #    only the lint trips, so disable it (matches the prebuilt build).
+  #    only the lint trips, so disable it.
+  #  - MODULE_SIG_ALL: signs every module at install via sign-file, which fails under
+  #    nixpkgs OpenSSL 3 with the auto-generated key. We don't need signed modules.
   configfile = pkgs.runCommand "pvm-host-${version}.config" { } ''
     sed -E \
-      -e 's@^(CONFIG_MODULE_SIG_KEY)=.*@\1=""@' \
       -e 's@^CONFIG_UAPI_HEADER_TEST=.*@# CONFIG_UAPI_HEADER_TEST is not set@' \
+      -e 's@^CONFIG_MODULE_SIG_ALL=.*@# CONFIG_MODULE_SIG_ALL is not set@' \
       ${config} > $out
   '';
 in
